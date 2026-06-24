@@ -1,23 +1,32 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   useReactTable,
   getCoreRowModel,
-  getSortedRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
   createColumnHelper,
   flexRender,
 } from '@tanstack/react-table'
-import { EMPLOYEES } from '../data/employess'
+import { useGetEmployeesQuery } from '../store/EmployessApi'
 import '../estilos/EmployeeTable.css'
 
 
 const columnHelper = createColumnHelper()
 
+const DEPARTMENTS = [
+  'Contenido',
+  'Diseño',
+  'Finanzas',
+  'Ingeniería',
+  'Marketing',
+  'Operaciones',
+  'Recursos Humanos',
+  'Soporte',
+  'TI',
+  'Ventas',
+]
+
 const columns = [
   columnHelper.accessor('id', {
     header: '#',
-    enableSorting: false,
     enableColumnFilter: false,
     cell: info => (
       <span className="cell-id">{info.getValue()}</span>
@@ -38,7 +47,6 @@ const columns = [
 
   columnHelper.accessor('email', {
     header: 'Correo electrónico',
-    enableSorting: false,
     cell: info => (
       <span className="cell-muted">{info.getValue()}</span>
     ),
@@ -104,11 +112,40 @@ export default function EmployeeTable() {
     pageSize: 5,
   })
 
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setDebouncedSearch(globalFilter)
+    }, 400)
+    return () => clearTimeout(timeout)
+  }, [globalFilter])
 
-  const data = useMemo(() => EMPLOYEES, [])
+  const roleFilter = columnFilters.find(f => f.id === 'role')?.value ?? ''
+  const statusFilter = columnFilters.find(f => f.id === 'status')?.value ?? ''
+  const departmentFilter = columnFilters.find(f => f.id === 'department')?.value ?? ''
+  const sortBy = sorting[0]?.id ?? ''
+  const sortDir = sorting[0]?.desc ? 'desc' : 'asc'
+  const { data: apiResponse, isFetching, isError, error } = useGetEmployeesQuery({
+    search: debouncedSearch,
+    role: roleFilter,
+    status: statusFilter,
+    department: departmentFilter,
+    sortBy,
+    sortDir,
+    page: pagination.pageIndex + 1, 
+    pageSize: pagination.pageSize,
+  })
+
+  const rows = apiResponse?.data ?? []
+  const meta = apiResponse?.meta ?? { total: 0, totalPages: 0 }
+  const data = rows
+
   const table = useReactTable({
     data,
     columns,
+    pageCount: meta.totalPages,
+    manualPagination: true,
+    manualSorting: true,
     state: {
       sorting,
       columnFilters,
@@ -120,9 +157,6 @@ export default function EmployeeTable() {
     onGlobalFilterChange: setGlobalFilter,
     onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
   })
   const setColumnFilter = (columnId, value) => {
     setColumnFilters(prev => {
@@ -134,10 +168,9 @@ export default function EmployeeTable() {
 
   const getColumnFilterValue = (columnId) =>
     columnFilters.find(f => f.id === columnId)?.value ?? ''
-
-  const totalRows = table.getFilteredRowModel().rows.length
+  const totalRows = meta.total
   const { pageIndex, pageSize } = table.getState().pagination
-  const firstRow = pageIndex * pageSize + 1
+  const firstRow = totalRows === 0 ? 0 : pageIndex * pageSize + 1
   const lastRow = Math.min(firstRow + pageSize - 1, totalRows)
 
   return (
@@ -147,10 +180,20 @@ export default function EmployeeTable() {
         <div>
           <h1 className="panel-title">Gestión de empleados</h1>
           <p className="panel-subtitle">
-            {totalRows} registro{totalRows !== 1 ? 's' : ''} encontrado{totalRows !== 1 ? 's' : ''}
+            {isFetching
+              ? 'Cargando...'
+              : `${totalRows} registro${totalRows !== 1 ? 's' : ''} encontrado${totalRows !== 1 ? 's' : ''}`}
           </p>
         </div>
       </div>
+
+      {isError && (
+        <div className="filters-bar" style={{ background: '#faece7', color: '#993c1d' }}>
+          No se pudo conectar con el servicio backend (employees.php). Verifica que el
+          servidor PHP esté corriendo en http://127.0.0.1:8000.
+          {error?.status ? ` (HTTP ${error.status})` : ''}
+        </div>
+      )}
 
       <div className="filters-bar">
         <div className="filter-group filter-wide">
@@ -213,7 +256,7 @@ export default function EmployeeTable() {
             onChange={e => setColumnFilter('department', e.target.value)}
           >
             <option value="">Todos</option>
-            {[...new Set(EMPLOYEES.map(e => e.department))].sort().map(d => (
+            {DEPARTMENTS.map(d => (
               <option key={d} value={d}>{d}</option>
             ))}
           </select>
