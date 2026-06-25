@@ -10,7 +10,6 @@ import '../estilos/EmployeeTable.css'
 
 
 const columnHelper = createColumnHelper()
-
 const DEPARTMENTS = [
   'Contenido',
   'Diseño',
@@ -125,7 +124,15 @@ export default function EmployeeTable() {
   const departmentFilter = columnFilters.find(f => f.id === 'department')?.value ?? ''
   const sortBy = sorting[0]?.id ?? ''
   const sortDir = sorting[0]?.desc ? 'desc' : 'asc'
-  const { data: apiResponse, isFetching, isError, error } = useGetEmployeesQuery({
+  const {
+    data: apiResponse,
+    isLoading,
+    isFetching,
+    isSuccess,
+    isError,
+    error,
+    refetch,
+  } = useGetEmployeesQuery({
     search: debouncedSearch,
     role: roleFilter,
     status: statusFilter,
@@ -135,7 +142,6 @@ export default function EmployeeTable() {
     page: pagination.pageIndex + 1, 
     pageSize: pagination.pageSize,
   })
-
   const rows = apiResponse?.data ?? []
   const meta = apiResponse?.meta ?? { total: 0, totalPages: 0 }
   const data = rows
@@ -180,11 +186,21 @@ export default function EmployeeTable() {
         <div>
           <h1 className="panel-title">Gestión de empleados</h1>
           <p className="panel-subtitle">
-            {isFetching
-              ? 'Cargando...'
-              : `${totalRows} registro${totalRows !== 1 ? 's' : ''} encontrado${totalRows !== 1 ? 's' : ''}`}
+            {isLoading
+              ? 'Cargando (primera carga)...'
+              : isFetching
+                ? 'Actualizando...'
+                : `${totalRows} registro${totalRows !== 1 ? 's' : ''} encontrado${totalRows !== 1 ? 's' : ''}`}
           </p>
         </div>
+        <button
+          className="btn-clear-all"
+          onClick={() => refetch()}
+          disabled={isFetching}
+          title="Vuelve a pedir los mismos datos al backend, sin cambiar filtros"
+        >
+          {isFetching ? 'Actualizando...' : 'Actualizar'}
+        </button>
       </div>
 
       {isError && (
