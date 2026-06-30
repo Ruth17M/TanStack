@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+/* import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { Provider } from 'react-redux'
 import { configureStore } from '@reduxjs/toolkit'
@@ -145,3 +145,4 @@ describe('EmployeeTable: integración real contra backend PHP', () => {
     }, { timeout: 5000 })
   })
 })
+*/

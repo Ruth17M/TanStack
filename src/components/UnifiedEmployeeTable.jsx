@@ -2,14 +2,16 @@ import React, { useState, useEffect } from 'react'
 import {
   useReactTable,
   getCoreRowModel,
+  getSortedRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
   createColumnHelper,
   flexRender,
 } from '@tanstack/react-table'
-import { useGetEmployeesQuery } from '../store/EmployessApi'
 import '../estilos/EmployeeTable.css'
 
-
 const columnHelper = createColumnHelper()
+
 const DEPARTMENTS = [
   'Contenido',
   'Diseño',
@@ -27,70 +29,51 @@ const columns = [
   columnHelper.accessor('id', {
     header: '#',
     enableColumnFilter: false,
-    cell: info => (
-      <span className="cell-id">{info.getValue()}</span>
-    ),
+    cell: info => <span className="cell-id">{info.getValue()}</span>,
   }),
-
   columnHelper.accessor('name', {
     header: 'Nombre',
     cell: info => (
       <div className="cell-name">
-        <span className="avatar">
-          {info.getValue().charAt(0)}
-        </span>
+        <span className="avatar">{info.getValue().charAt(0)}</span>
         <span>{info.getValue()}</span>
       </div>
     ),
   }),
-
   columnHelper.accessor('email', {
     header: 'Correo electrónico',
-    cell: info => (
-      <span className="cell-muted">{info.getValue()}</span>
-    ),
+    cell: info => <span className="cell-muted">{info.getValue()}</span>,
   }),
-
   columnHelper.accessor('role', {
     header: 'Rol',
     cell: info => {
       const role = info.getValue()
-      const cls = role === 'Admin'
-        ? 'badge badge-admin'
-        : role === 'Editor'
-        ? 'badge badge-editor'
+      const cls =
+        role === 'Admin' ? 'badge badge-admin'
+        : role === 'Editor' ? 'badge badge-editor'
         : 'badge badge-user'
       return <span className={cls}>{role}</span>
     },
   }),
-
-  columnHelper.accessor('department', {
-    header: 'Departamento',
-  }),
-
+  columnHelper.accessor('department', { header: 'Departamento' }),
   columnHelper.accessor('status', {
     header: 'Estado',
     cell: info => {
       const s = info.getValue()
-      const cls = s === 'Activo'
-        ? 'badge badge-active'
-        : s === 'Inactivo'
-        ? 'badge badge-inactive'
+      const cls =
+        s === 'Activo' ? 'badge badge-active'
+        : s === 'Inactivo' ? 'badge badge-inactive'
         : 'badge badge-pending'
       return <span className={cls}>{s}</span>
     },
   }),
-
   columnHelper.accessor('salary', {
     header: 'Salario',
     enableColumnFilter: false,
     cell: info => (
-      <span className="cell-right">
-        ${info.getValue().toLocaleString('es-MX')}
-      </span>
+      <span className="cell-right">${info.getValue().toLocaleString('es-MX')}</span>
     ),
   }),
-
   columnHelper.accessor('startDate', {
     header: 'Ingreso',
     enableColumnFilter: false,
@@ -101,69 +84,57 @@ const columns = [
   }),
 ]
 
+export default function UnifiedEmployeeTable({
+  mode,
+  sorting, setSorting,
+  columnFilters, setColumnFilters,
+  globalFilter, setGlobalFilter,
+  pagination, setPagination,
+  dataSource,
+}) {
+  if (mode !== 'frontend' && mode !== 'backend') {
+    throw new Error(
+      `UnifiedEmployeeTable: prop "mode" debe ser "frontend" o "backend", recibido: "${mode}"`
+    )
+  }
 
-export default function EmployeeTable() {
-  const [sorting, setSorting] = useState([])
-  const [columnFilters, setColumnFilters] = useState([])
-  const [globalFilter, setGlobalFilter] = useState('')
-  const [pagination, setPagination] = useState({
-    pageIndex: 0,
-    pageSize: 5,
-  })
-
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      setDebouncedSearch(globalFilter)
-    }, 400)
-    return () => clearTimeout(timeout)
-  }, [globalFilter])
-
-  const roleFilter = columnFilters.find(f => f.id === 'role')?.value ?? ''
-  const statusFilter = columnFilters.find(f => f.id === 'status')?.value ?? ''
-  const departmentFilter = columnFilters.find(f => f.id === 'department')?.value ?? ''
-  const sortBy = sorting[0]?.id ?? ''
-  const sortDir = sorting[0]?.desc ? 'desc' : 'asc'
   const {
-    data: apiResponse,
-    isLoading,
-    isFetching,
-    isSuccess,
-    isError,
-    error,
-    refetch,
-  } = useGetEmployeesQuery({
-    search: debouncedSearch,
-    role: roleFilter,
-    status: statusFilter,
-    department: departmentFilter,
-    sortBy,
-    sortDir,
-    page: pagination.pageIndex + 1, 
-    pageSize: pagination.pageSize,
-  })
-  const rows = apiResponse?.data ?? []
-  const meta = apiResponse?.meta ?? { total: 0, totalPages: 0 }
-  const data = rows
+    rows,
+    pageCount,
+    totalRows,
+    isLoading = false,
+    isFetching = false,
+    isError = false,
+    errorMessage = '',
+    onRefetch = () => {},
+  } = dataSource
+
+  const isBackend = mode === 'backend'
 
   const table = useReactTable({
-    data,
+    data: rows,
     columns,
-    pageCount: meta.totalPages,
-    manualPagination: true,
-    manualSorting: true,
-    state: {
-      sorting,
-      columnFilters,
-      globalFilter,
-      pagination,
-    },
+    state: { sorting, columnFilters, globalFilter, pagination },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
     onPaginationChange: setPagination,
+
     getCoreRowModel: getCoreRowModel(),
+    ...(isBackend
+      ? {
+          manualSorting: true,
+          manualFiltering: true,
+          manualPagination: true,
+          pageCount,
+        }
+      : {
+          getSortedRowModel: getSortedRowModel(),
+          getFilteredRowModel: getFilteredRowModel(),
+          getPaginationRowModel: getPaginationRowModel(),
+        }),
   })
+
   const setColumnFilter = (columnId, value) => {
     setColumnFilters(prev => {
       const others = prev.filter(f => f.id !== columnId)
@@ -172,16 +143,17 @@ export default function EmployeeTable() {
     setPagination(p => ({ ...p, pageIndex: 0 }))
   }
 
-  const getColumnFilterValue = (columnId) =>
+  const getColumnFilterValue = columnId =>
     columnFilters.find(f => f.id === columnId)?.value ?? ''
-  const totalRows = meta.total
+
+  const effectiveTotalRows = isBackend ? totalRows : table.getFilteredRowModel().rows.length
+
   const { pageIndex, pageSize } = table.getState().pagination
-  const firstRow = totalRows === 0 ? 0 : pageIndex * pageSize + 1
-  const lastRow = Math.min(firstRow + pageSize - 1, totalRows)
+  const firstRow = effectiveTotalRows === 0 ? 0 : pageIndex * pageSize + 1
+  const lastRow = Math.min(firstRow + pageSize - 1, effectiveTotalRows)
 
   return (
     <div className="table-container">
-
       <div className="panel-header">
         <div>
           <h1 className="panel-title">Gestión de empleados</h1>
@@ -189,25 +161,25 @@ export default function EmployeeTable() {
             {isLoading
               ? 'Cargando (primera carga)...'
               : isFetching
-                ? 'Actualizando...'
-                : `${totalRows} registro${totalRows !== 1 ? 's' : ''} encontrado${totalRows !== 1 ? 's' : ''}`}
+              ? 'Actualizando...'
+              : `${effectiveTotalRows} registro${effectiveTotalRows !== 1 ? 's' : ''} encontrado${effectiveTotalRows !== 1 ? 's' : ''}`}
           </p>
         </div>
-        <button
-          className="btn-clear-all"
-          onClick={() => refetch()}
-          disabled={isFetching}
-          title="Vuelve a pedir los mismos datos al backend, sin cambiar filtros"
-        >
-          {isFetching ? 'Actualizando...' : 'Actualizar'}
-        </button>
+        {isBackend && (
+          <button
+            className="btn-clear-all"
+            onClick={onRefetch}
+            disabled={isFetching}
+            title="Vuelve a pedir los mismos datos al backend, sin cambiar filtros"
+          >
+            {isFetching ? 'Actualizando...' : 'Actualizar'}
+          </button>
+        )}
       </div>
 
       {isError && (
         <div className="filters-bar" style={{ background: '#faece7', color: '#993c1d' }}>
-          No se pudo conectar con el servicio backend (employees.php). Verifica que el
-          servidor PHP esté corriendo en http://127.0.0.1:8000.
-          {error?.status ? ` (HTTP ${error.status})` : ''}
+          {errorMessage || 'Ocurrió un error al cargar los datos.'}
         </div>
       )}
 
@@ -227,11 +199,9 @@ export default function EmployeeTable() {
               }}
             />
             {globalFilter && (
-              <button
-                className="clear-btn"
-                onClick={() => setGlobalFilter('')}
-                title="Limpiar búsqueda"
-              >✕</button>
+              <button className="clear-btn" onClick={() => setGlobalFilter('')} title="Limpiar búsqueda">
+                ✕
+              </button>
             )}
           </div>
         </div>
@@ -305,15 +275,6 @@ export default function EmployeeTable() {
                     key={header.id}
                     className={header.column.getCanSort() ? 'th-sortable' : ''}
                     onClick={header.column.getToggleSortingHandler()}
-                    title={
-                      header.column.getCanSort()
-                        ? header.column.getNextSortingOrder() === 'asc'
-                          ? 'Ordenar ascendente'
-                          : header.column.getNextSortingOrder() === 'desc'
-                          ? 'Ordenar descendente'
-                          : 'Sin orden'
-                        : undefined
-                    }
                   >
                     <span className="th-content">
                       {flexRender(header.column.columnDef.header, header.getContext())}
@@ -354,9 +315,7 @@ export default function EmployeeTable() {
               table.getRowModel().rows.map((row, idx) => (
                 <tr key={row.id} className={idx % 2 === 0 ? '' : 'row-alt'}>
                   {row.getVisibleCells().map(cell => (
-                    <td key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
+                    <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
                   ))}
                 </tr>
               ))
@@ -367,19 +326,12 @@ export default function EmployeeTable() {
 
       <div className="pagination">
         <div className="pg-info">
-          {totalRows > 0
-            ? `Mostrando ${firstRow}–${lastRow} de ${totalRows} registros`
-            : '0 registros'}
+          {effectiveTotalRows > 0 ? `Mostrando ${firstRow}–${lastRow} de ${effectiveTotalRows} registros` : '0 registros'}
         </div>
 
         <div className="pg-size-selector">
           <label>Filas por página:</label>
-          <select
-            value={pageSize}
-            onChange={e => {
-              table.setPageSize(Number(e.target.value))
-            }}
-          >
+          <select value={pageSize} onChange={e => table.setPageSize(Number(e.target.value))}>
             {[5, 10, 15, 20].map(size => (
               <option key={size} value={size}>{size}</option>
             ))}
@@ -387,28 +339,13 @@ export default function EmployeeTable() {
         </div>
 
         <div className="pg-buttons">
-          <button
-            className="pg-btn"
-            onClick={() => table.setPageIndex(0)}
-            disabled={!table.getCanPreviousPage()}
-            title="Primera página"
-          >«</button>
-
-          <button
-            className="pg-btn"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-            title="Página anterior"
-          >‹</button>
+          <button className="pg-btn" onClick={() => table.setPageIndex(0)} disabled={!table.getCanPreviousPage()} title="Primera página">«</button>
+          <button className="pg-btn" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()} title="Página anterior">‹</button>
 
           {Array.from({ length: table.getPageCount() }, (_, i) => i).map(i => {
             const current = table.getState().pagination.pageIndex
             const total = table.getPageCount()
-            if (
-              i === 0 ||
-              i === total - 1 ||
-              Math.abs(i - current) <= 1
-            ) {
+            if (i === 0 || i === total - 1 || Math.abs(i - current) <= 1) {
               return (
                 <button
                   key={i}
@@ -425,21 +362,12 @@ export default function EmployeeTable() {
             return null
           })}
 
-          <button
-            className="pg-btn"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-            title="Página siguiente"
-          >›</button>
-
-          <button
-            className="pg-btn"
-            onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-            disabled={!table.getCanNextPage()}
-            title="Última página"
-          >»</button>
+          <button className="pg-btn" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()} title="Página siguiente">›</button>
+          <button className="pg-btn" onClick={() => table.setPageIndex(table.getPageCount() - 1)} disabled={!table.getCanNextPage()} title="Última página">»</button>
         </div>
       </div>
     </div>
   )
 }
+
+export const INITIAL_PAGINATION = { pageIndex: 0, pageSize: 5 }
